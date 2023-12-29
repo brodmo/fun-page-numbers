@@ -20,83 +20,49 @@ import (
 
 const DigitString = "4812018"
 var baseTerms = []int {0, 1, 2, 5, 15, 51, 188, 731, 2950, 12235, 51822, 223191, 974427, 4302645, 19181100, 86211885, 390248055, 1777495635, 8140539950, 37463689775, 173164232965, 803539474345, 3741930523740, 17481709707825, 81912506777200, 384847173838501, 1812610804416698}
-var operations = []Operation{opAdd, opMultiply, opDivide, opRaise}
+var operations = []*Operation{&opAdd, &opMultiply, &opDivide, &opRaise}
 const UseNegation = true  // don't use opSubtract in this case!
-
-type ValueGenerator interface {
-	HasValue() bool
-	NextValue()
-	ResetValue()
-}
-
-type Cache struct {
-	value int
-	err error
-	valid bool
-}
 
 type Term struct {  // todo delegate most to operation
 	fst, snd  SubTerm
-	negationFactor *Integer  // only used for raise
-	operationIndex int
-	cached Cache
+	operation *Operation
+	negated bool
 }
 
 func NewTerm(fst, snd SubTerm) *Term {
-	return &Term{fst, snd, NewInteger(1), 0, Cache{0, nil, false}}
+	return &Term{fst, snd, nil, false}
 }
 
-func (term *Term) Operation() Operation {
-	return operations[term.operationIndex]
-}
-
-func (term *Term) Value() (int, error) {
-	if term.cached.valid {
-		return term.cached.value, term.cached.err
-	}
-	term.cached.valid = true
-	fstValue, err := term.fst.Value()
-	if err != nil {term.cached.err = err; return 0, err}
-	sndValue, err := term.snd.Value()
-	if err != nil {term.cached.err = err; return 0, err}
-	result, err := term.Operation().eval(fstValue, sndValue)
-	if err != nil {term.cached.err = err; return 0, err}
-	factor, _ := term.negationFactor.Value()
-	term.cached.value = factor * result
-	term.cached.err = nil
-	return term.cached.value, nil
-}
-
-func (term *Term) HasValue() bool {
-	return term.operationIndex < len(operations)
-}
-
-func (term *Term) NextValue() {  // should delegate to operation
-	term.cached.valid = false
-	subTermGen := []ValueGenerator{term.fst, term.snd}
-	if term.Operation().symbol == '^' {
-		subTermGen = append(subTermGen, term.negationFactor)
-	}
-	for _, subTerm := range subTermGen {
-		subTerm.NextValue()
-		if subTerm.HasValue() {
-			return
+func (term *Term) Values() <-chan int {
+	out := make(chan int)
+	go func() {
+		for _, op := range operations {
+			term.operation = op
+			for fstValue := range term.fst.Values() {
+				for sndValue := range term.snd.Values() {
+					result, err := op.eval(fstValue, sndValue)
+					if err == nil {
+						out <- result
+						if op.symbol == '^' {
+							term.negated = true
+							out <- -result
+							term.negated = false
+						}
+					}
+				}
+			}
 		}
-		subTerm.ResetValue()
-	}
-	term.operationIndex++
-}
-
-func (term *Term) ResetValue() {
-	term.operationIndex = 0
+		close(out)
+	}()
+	return out
 }
 
 func (term *Term) String() string {
 	prefix := ""
-	if term.negationFactor.negated {
+	if term.negated {
 		prefix = " -"
 	}
-	return fmt.Sprintf("%s( %s %c %s )", prefix, term.fst.String(), term.Operation().symbol, term.snd.String())
+	return fmt.Sprintf("%s( %s %c %s )", prefix, term.fst.String(), term.operation.symbol, term.snd.String())
 }
 
 func (term *Term) Compact() string {
@@ -104,64 +70,57 @@ func (term *Term) Compact() string {
 }
 
 type SubTerm interface {
-	ValueGenerator
-	Value() (int, error)
+	Values() <-chan int
 	String() string
 	Compact() string
 }
 
 type Integer struct {
 	value int
-	negated bool
-	exhausted bool
 }
 
-func NewInteger(value int) *Integer {
-	return &Integer{value, false, false}
+func (number *Integer) Values() <-chan int {
+	out := make(chan int)
+	go func() {
+		out <- number.value
+		out <- -number.value
+		close(out)
+	}()
+	return out
 }
 
-func (int *Integer) Value() (int, error) {
-	if int.negated {
-		return -int.value, nil
-	} else {
-		return int.value, nil
-	}
+func (number *Integer) String() string {
+	return strconv.Itoa(number.value)
 }
 
-func (int *Integer) HasValue() bool {
-	return !int.exhausted
-}
-
-func (int *Integer) NextValue() {
-	if !int.negated && UseNegation {
-		int.negated = true
-	} else {
-		int.exhausted = true
-	}
-}
-
-func (int *Integer) ResetValue() {
-	int.negated = false
-	int.exhausted = false
-}
-
-func (int *Integer) String() string {
-	value, _ := int.Value()
-	return strconv.Itoa(value)
-}
-
-func (int *Integer) Compact() string {
-	return int.String()
+func (number *Integer) Compact() string {
+	return number.String()
 }
 
 type TermBuilder struct {
 	digits string
-	splitIndex int
-	fst, snd* TermBuilder
 }
 
-func NewTermBuilder(digits string) *TermBuilder {
-	return &TermBuilder{digits, 0, nil, nil}
+func (builder *TermBuilder) Terms() <-chan SubTerm {
+	out := make(chan SubTerm)
+	go func() {
+		for splitIdx := range builder.digits {
+			if splitIdx == 0 {
+				out <- &Integer{Atoi(builder.digits)}
+				continue
+			}
+			invSplitIdx := len(builder.digits) - splitIdx
+			fstBuilder := TermBuilder{builder.digits[:invSplitIdx]}
+			sndBuilder := TermBuilder{builder.digits[invSplitIdx:]}
+			for fstTerm := range fstBuilder.Terms() {
+				for sndTerm := range sndBuilder.Terms() {
+					out <- NewTerm(fstTerm, sndTerm)
+				}
+			}
+		}
+		close(out)
+	}()
+	return out
 }
 
 func Atoi(digits string) int {
@@ -169,42 +128,6 @@ func Atoi(digits string) int {
 	return integer	
 }
 
-func (builder *TermBuilder) Value() SubTerm {
-	if builder.splitIndex == 0 {
-		return NewInteger(Atoi(builder.digits))
-	}
-	return NewTerm(builder.fst.Value(), builder.snd.Value())
-}
-
-func (builder *TermBuilder) HasValue() bool {
-	return builder.splitIndex < len(builder.digits)
-}
-
-func (builder *TermBuilder) NextValue() {
-	if builder.splitIndex == 0 {
-		builder.Next()
-		return
-	}
-	for _, subTerm := range []ValueGenerator{builder.fst, builder.snd} {
-		subTerm.NextValue()
-		if subTerm.HasValue() {
-			return
-		}
-		subTerm.ResetValue()
-	}
-	builder.Next()
-}
-
-func (builder *TermBuilder) Next() {
-	builder.splitIndex += 1
-	inverseSplitIndex := len(builder.digits) - builder.splitIndex
-	builder.fst = NewTermBuilder(builder.digits[:inverseSplitIndex])
-	builder.snd = NewTermBuilder(builder.digits[inverseSplitIndex:])
-}
-
-func (builder *TermBuilder) ResetValue() {
-	builder.splitIndex = 0
-}
 
 // multiple between? 1 * - 2? probably not: implicit 0
 
@@ -265,22 +188,15 @@ var (
 
 func main() {
 	start := time.Now()
-	termGenCounter := 0
 	termEvalCounter := 0
 	numbersGeneratedCounter := 0
 	result := make(map[int][]string)
-	builder := *NewTermBuilder(DigitString)
-	maxCount := baseTerms[len(DigitString)]
+	builder := TermBuilder{DigitString}
+	// maxCount := baseTerms[len(DigitString)]
 	count := 0
-	for ;builder.HasValue();builder.NextValue() {
+	for term := range builder.Terms() {
 		count++
-		term := builder.Value()
-		for ;term.HasValue();term.NextValue() {
-			value, err := term.Value()
-			termGenCounter++
-			if err != nil {
-				continue
-			}
+		for value := range term.Values() {
 			termEvalCounter++
 			terms := result[value]
 			if terms == nil {
@@ -289,7 +205,7 @@ func main() {
 			}
 			result[value] = append(terms, term.Compact())
 		}
-		fmt.Printf("%d / %d\n", count, maxCount)
+		// fmt.Printf("%d / %d\n", count, maxCount)
 	}
 	fmt.Printf("took %v\n", time.Since(start))
 	fname := fmt.Sprintf("%s-complete-%d.txt", DigitString, time.Now().Unix())
@@ -308,7 +224,6 @@ func main() {
 		WriteResult(compactWriter, key, terms, 3)
 	}
 	printer := message.NewPrinter(language.English)
-	printer.Printf("generated %d terms\n", termGenCounter)
 	printer.Printf("evaluated %d terms\n", termEvalCounter)
 	printer.Printf("generated %d different numbers\n", numbersGeneratedCounter)
 	printer.Printf("smallest number not generated: %d\n", smallestNumber)
