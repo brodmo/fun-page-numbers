@@ -22,8 +22,14 @@ func Generate(digits string) <-chan Result {
 				continue
 			}
 			invSplitIdx := len(digits) - splitIdx
+			var sndResultCache []Result  // speedup is marginal but real
 			for fstResult := range Generate(digits[:invSplitIdx]) {
-				for sndResult := range Generate(digits[invSplitIdx:]) {
+				if sndResultCache == nil {
+					for sndResult := range Generate(digits[invSplitIdx:]) {
+						sndResultCache = append(sndResultCache, sndResult)
+					}
+				}
+				for _, sndResult := range sndResultCache {
 					for _, op := range operators {
 						value, err := op.eval(fstResult.value, sndResult.value)
 						if err == nil {
