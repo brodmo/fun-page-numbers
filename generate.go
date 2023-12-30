@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strconv"
 )
 
@@ -26,14 +25,7 @@ func Generate(digits string) <-chan Result {
 				}
 				for _, sndResult := range sndResultCache {
 					for _, op := range operators {
-						value, valid := op.eval(fstResult.value, sndResult.value)
-						if valid {
-							repr := fmt.Sprintf("(%s%c%s)", fstResult.repr, op.symbol, sndResult.repr)
-							out <- Result{value, repr}
-							if op.symbol == '^' {
-								out <- Result{-value, "-" + repr}
-							}
-						}
+						out <- <-op(fstResult.value, sndResult.value)
 					}
 				}
 			}

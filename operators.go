@@ -1,55 +1,55 @@
 package main
 
-type Operator struct {
-	symbol rune
-	eval func(int, int) (int, bool)
+import "fmt"
+
+func genAdd(fst, snd int) <-chan Result {
+	out := make(chan Result)
+	go func() {
+		if !(fst > 1_000_000 && snd > 1_000_000 || fst < -1_000_000 && snd < -1_000_000) {
+			out <- Result{fst + snd, fmt.Sprintf("%d+%d", fst, snd)}
+		}
+		close(out)
+	}()
+	return out
 }
 
-var (
-	opAdd        = Operator{'+', func(fst, snd int) (int, bool) {
-		if fst > 1_000_000 && snd > 1_000_000 || fst < -1_000_000 && snd < -1_000_000 {
-			return 0, false
+func genMultiply(fst, snd int) <-chan Result {
+	out := make(chan Result)
+	go func() {
+		if !(snd < 0 || fst > 1_000 && snd > 1_000 || fst < -1_000 && snd < -1_000 || fst > 1_000_000 || fst < -1_000_000 || snd > 1_000_000 || snd < -1_000_000) {
+			out <- Result{fst * snd, fmt.Sprintf("%d*%d", fst, snd)}
 		}
-		return fst + snd, true
-	}}
-	opMultiply   = Operator{'*', func(fst, snd int) (int, bool) {
-		if fst > 1_000 && snd > 1_000 || fst < -1_000 && snd < -1_000 || fst > 1_000_000 || fst < -1_000_000 || snd > 1_000_000 || snd < -1_000_000 {
-			return 0, false
+		close(out)
+	}()
+	return out
+}
+func genDivide(fst, snd int) <-chan Result {
+	out := make(chan Result)
+	go func() {
+		if snd > 0 && fst % snd == 0 {
+			out <- Result{fst / snd, fmt.Sprintf("%d/%d", fst, snd)}
 		}
-		if snd < 0 {
-			return 0, false
-		}
-		return fst * snd, true
-	}}
-	opDivide     = Operator{'/', func(fst, snd int) (int, bool) {
-		if snd < 0 {
-			return 0, false
-		}
-		if snd == 0 {
-			return 0, false
-		}
-		if fst % snd != 0 {
-			return 0, false
-		}
-		return fst / snd, true
-	}}
-	opRaise      = Operator{'^', func(fst, snd int) (int, bool) {
-		if fst < 0 {
-			return 0, false
-		}
-		if snd < 0 {
-			return 0, false
-		}
-		if snd > 100 {
-			return 0, false
-		}
-		result := 1
-		for i := 0; i < snd; i++ {
-			result *= fst
-			if result > 1_000_000 {
-				return 0, false
+		close(out)
+	}()
+	return out
+}
+func genRaise(fst, snd int) <-chan Result {
+	out := make(chan Result)
+	go func() {
+		if fst >= 0 && snd >= 0 && snd < 100 {
+			result := 1
+			for i := 0; i < snd; i++ {
+				result *= fst
+				if result > 1_000_000 {
+					close(out)
+					return
+				}
 			}
+			repr := fmt.Sprintf("%d^%d", fst, snd)
+			out <- Result{result, repr}
+			out <- Result{-result, "-" + repr}
 		}
-		return result, true
-	}}
-)
+		close(out)
+	}()
+	return out
+}

@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
-const DigitString = "4812018"
-var operators = []*Operator{&opAdd, &opMultiply, &opDivide, &opRaise}
+const DigitString = "123456"
+type Operator = func(fst, snd int) <-chan Result
+var operators = []Operator{genAdd, genMultiply, genDivide, genRaise}
 
 func main() {
 	start := time.Now()
