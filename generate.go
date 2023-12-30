@@ -5,7 +5,6 @@ import (
 	"strconv"
 )
 
-
 type Result struct {
 	value int
 	repr string
