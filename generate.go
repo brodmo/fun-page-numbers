@@ -30,8 +30,8 @@ func Generate(digits string) <-chan Result {
 				}
 				for _, sndResult := range sndResultCache {
 					for _, op := range operators {
-						value, err := op.eval(fstResult.value, sndResult.value)
-						if err == nil {
+						value, valid := op.eval(fstResult.value, sndResult.value)
+						if valid {
 							repr := fmt.Sprintf("(%s%c%s)", fstResult.repr, op.symbol, sndResult.repr)
 							out <- Result{value, repr}
 							if op.symbol == '^' {

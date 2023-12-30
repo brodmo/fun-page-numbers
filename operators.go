@@ -1,58 +1,55 @@
 package main
 
-import "errors"
-
 type Operator struct {
 	symbol rune
-	eval func(int, int) (int, error)
+	eval func(int, int) (int, bool)
 }
 
 var (
-	opAdd        = Operator{'+', func(fst, snd int) (int, error) {
+	opAdd        = Operator{'+', func(fst, snd int) (int, bool) {
 		if fst > 1_000_000 && snd > 1_000_000 || fst < -1_000_000 && snd < -1_000_000 {
-			return 0, errors.New("result too big")
+			return 0, false
 		}
-		return fst + snd, nil
+		return fst + snd, true
 	}}
-	opSubtract   = Operator{'-', func(fst, snd int) (int, error) {
-		return fst - snd, nil
-	}}
-	opMultiply   = Operator{'*', func(fst, snd int) (int, error) {
+	opMultiply   = Operator{'*', func(fst, snd int) (int, bool) {
 		if fst > 1_000 && snd > 1_000 || fst < -1_000 && snd < -1_000 || fst > 1_000_000 || fst < -1_000_000 || snd > 1_000_000 || snd < -1_000_000 {
-			return 0, errors.New("result too big")
+			return 0, false
 		}
 		if snd < 0 {
-			return 0, errors.New("duplicate negative")
+			return 0, false
 		}
-		return fst * snd, nil
+		return fst * snd, true
 	}}
-	opDivide     = Operator{'/', func(fst, snd int) (int, error) {
+	opDivide     = Operator{'/', func(fst, snd int) (int, bool) {
 		if snd < 0 {
-			return 0, errors.New("duplicate negative")
+			return 0, false
 		}
 		if snd == 0 {
-			return 0, errors.New("divide by zero")
+			return 0, false
 		}
 		if fst % snd != 0 {
-			return 0, errors.New("non-zero remainder")
+			return 0, false
 		}
-		return fst / snd, nil
+		return fst / snd, true
 	}}
-	opRaise      = Operator{'^', func(fst, snd int) (int, error) {
+	opRaise      = Operator{'^', func(fst, snd int) (int, bool) {
 		if fst < 0 {
-			return 0, errors.New("duplicate negative")
+			return 0, false
 		}
 		if snd < 0 {
-			return 0, errors.New("negative exponent")
+			return 0, false
 		}
 		if snd > 100 {
-			return 0, errors.New("exponent too big")
+			return 0, false
 		}
 		result := 1
 		for i := 0; i < snd; i++ {
 			result *= fst
-			if result > 1_000_000 {return 0, errors.New("result too big")}
+			if result > 1_000_000 {
+				return 0, false
+			}
 		}
-		return result, nil
+		return result, true
 	}}
 )
