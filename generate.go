@@ -13,18 +13,14 @@ type Result struct {
 func Generate(digits string) <-chan Result {
 	out := make(chan Result)
 	go func() {
-		for splitIdx := range digits {
-			if splitIdx == 0 {
-				value := Atoi(digits)
-				out <- Result{value, digits}
-				out <- Result{-value, "-" + digits}
-				continue
-			}
-			invSplitIdx := len(digits) - splitIdx
+		value := Atoi(digits)
+		out <- Result{value, digits}
+		out <- Result{-value, "-" + digits}
+		for splitIdx := len(digits) - 1; splitIdx > 0; splitIdx-- {  // reverse iteration so left->right terms are generated first
 			var sndResultCache []Result  // speedup is marginal but real
-			for fstResult := range Generate(digits[:invSplitIdx]) {
+			for fstResult := range Generate(digits[:splitIdx]) {
 				if sndResultCache == nil {
-					for sndResult := range Generate(digits[invSplitIdx:]) {
+					for sndResult := range Generate(digits[splitIdx:]) {
 						sndResultCache = append(sndResultCache, sndResult)
 					}
 				}
