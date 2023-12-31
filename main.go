@@ -16,7 +16,7 @@ func main() {
 	termEvalCounter := 0
 	numbersGeneratedCounter := 0
 	resultMap := make(map[int][]string)
-	for result := range Generate(DigitString) {
+	for _, result := range <- Generate(DigitString) {
 		termEvalCounter++
 		reprs := resultMap[result.value]
 		if reprs == nil {
