@@ -11,7 +11,8 @@ type Result struct {
 }
 
 func Generate(digits string) <-chan Result {
-	out := make(chan Result)
+	scale, _ := opRaise.eval(10, len(digits) - 1)
+	out := make(chan Result, scale)  // context switches are expensive, minimize them!
 	go func() {
 		value := Atoi(digits)
 		out <- Result{value, digits}
